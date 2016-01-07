@@ -1,0 +1,7 @@
+F:\Development\Whenables\WhenablesTests\obj\Debug\WhenablesTests.csprojResolveAssemblyReference.cache
+F:\Development\Whenables\WhenablesTests\bin\Debug\WhenablesTests.dll
+F:\Development\Whenables\WhenablesTests\bin\Debug\WhenablesTests.pdb
+F:\Development\Whenables\WhenablesTests\bin\Debug\Whenables.dll
+F:\Development\Whenables\WhenablesTests\bin\Debug\Whenables.pdb
+F:\Development\Whenables\WhenablesTests\obj\Debug\WhenablesTests.dll
+F:\Development\Whenables\WhenablesTests\obj\Debug\WhenablesTests.pdb

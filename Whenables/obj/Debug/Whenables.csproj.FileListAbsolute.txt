@@ -1,0 +1,5 @@
+F:\Development\Whenables\Whenables\bin\Debug\Whenables.dll
+F:\Development\Whenables\Whenables\bin\Debug\Whenables.pdb
+F:\Development\Whenables\Whenables\obj\Debug\Whenables.dll
+F:\Development\Whenables\Whenables\obj\Debug\Whenables.pdb
+F:\Development\Whenables\Whenables\obj\Debug\Whenables.csprojResolveAssemblyReference.cache
