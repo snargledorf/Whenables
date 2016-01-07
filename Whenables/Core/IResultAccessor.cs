@@ -2,10 +2,13 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Whenables
+namespace Whenables.Core
 {
-    public interface ICondition<T>
+    public interface IResultAccessor<T>
     {
+        T Result { get; }
+        bool HasResult { get; }
+
         T Get();
         T Get(TimeSpan timeout);
         T Get(int timoutMilliseconds);
@@ -15,7 +18,5 @@ namespace Whenables
         Task<T> GetAsync(TimeSpan timeout);
         Task<T> GetAsync(int timeoutMilliseconds);
         Task<T> GetAsync(CancellationToken cancellationToken);
-
-        bool TrySetItem(T item);
     }
 }

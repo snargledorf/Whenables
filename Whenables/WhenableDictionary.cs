@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using Whenables.Core;
 
 namespace Whenables
 {
@@ -8,9 +9,9 @@ namespace Whenables
     {
         private readonly IDictionary<TKey, TValue> dict;
 
-        private readonly DictionaryConditionManager<TKey, TValue> addingDictionaryConditions = new DictionaryConditionManager<TKey, TValue>();
-        private readonly DictionaryConditionManager<TKey, TValue> removingDictionaryConditions = new DictionaryConditionManager<TKey, TValue>();
-        private readonly DictionaryConditionManager<TKey, TValue> insertDictionaryConditions = new DictionaryConditionManager<TKey, TValue>();
+        private readonly KeyValueSetterManager<TKey, TValue> addManager = new KeyValueSetterManager<TKey, TValue>();
+        private readonly KeyValueSetterManager<TKey, TValue> removeManager = new KeyValueSetterManager<TKey, TValue>();
+        private readonly KeyValueSetterManager<TKey, TValue> insertManager = new KeyValueSetterManager<TKey, TValue>();
 
         public WhenableDictionary()
         {
@@ -43,7 +44,7 @@ namespace Whenables
             set
             {
                 dict[key] = value;
-                insertDictionaryConditions.SetKeyAndValueOnConditions(key, value);
+                insertManager.TrySet(key, value);
             }
         }
 
@@ -58,7 +59,7 @@ namespace Whenables
         public void Add(KeyValuePair<TKey, TValue> item)
         {
             dict.Add(item);
-            addingDictionaryConditions.SetKeyAndValueOnConditions(item.Key, item.Value);
+            addManager.TrySetResult(item);
         }
 
         public void Clear()
@@ -78,7 +79,7 @@ namespace Whenables
             if (!dict.Remove(item))
                 return false;
 
-            removingDictionaryConditions.SetKeyAndValueOnConditions(item.Key, item.Value);
+            removeManager.TrySetResult(item);
 
             return true;
         }
@@ -88,7 +89,7 @@ namespace Whenables
         public void Add(TKey key, TValue value)
         {
             dict.Add(key, value);
-            addingDictionaryConditions.SetKeyAndValueOnConditions(key, value);
+            addManager.TrySet(key, value);
         }
 
         public bool Remove(TKey key)
@@ -101,7 +102,7 @@ namespace Whenables
             if (!dict.Remove(key))
                 return false;
 
-            removingDictionaryConditions.SetKeyAndValueOnConditions(key, value);
+            removeManager.TrySet(key, value);
 
             return true;
         }
@@ -111,54 +112,52 @@ namespace Whenables
         public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator() => dict.GetEnumerator();
         IEnumerator IEnumerable.GetEnumerator() => ((IEnumerable)dict).GetEnumerator();
 
-        public IDictionaryCondition<TKey, TValue> WhenAdded(Func<TKey, bool> condition)
-            => CreateCondition((key, value) => condition(key), addingDictionaryConditions);
+        public IKeyValueResultAccessor<TKey, TValue> WhenAdded(Func<TKey, bool> condition)
+            => CreateCondition(kvp => condition(kvp.Key), addManager);
 
-        public IDictionaryCondition<TKey, TValue> WhenAdded(Func<TValue, bool> condition)
-            => CreateCondition((key, value) => condition(value), addingDictionaryConditions);
+        public IKeyValueResultAccessor<TKey, TValue> WhenAdded(Func<TValue, bool> condition)
+            => CreateCondition(kvp => condition(kvp.Value), addManager);
 
-        public IDictionaryCondition<TKey, TValue> WhenAdded(Func<TKey, TValue, bool> condition)
-            => CreateCondition(condition, addingDictionaryConditions);
+        public IKeyValueResultAccessor<TKey, TValue> WhenAdded(Func<TKey, TValue, bool> condition)
+            => CreateCondition(condition, addManager);
 
-        public IDictionaryCondition<TKey, TValue> WhenAdded(Func<KeyValuePair<TKey, TValue>, bool> condition)
-            => CreateCondition(condition, addingDictionaryConditions);
+        public IKeyValueResultAccessor<TKey, TValue> WhenAdded(Func<KeyValuePair<TKey, TValue>, bool> condition)
+            => CreateCondition(condition, addManager);
 
-        public IDictionaryCondition<TKey, TValue> WhenInserted(Func<TKey, bool> condition)
-            => CreateCondition((key, value) => condition(key), insertDictionaryConditions);
+        public IKeyValueResultAccessor<TKey, TValue> WhenInserted(Func<TKey, bool> condition)
+            => CreateCondition(kvp => condition(kvp.Key), insertManager);
 
-        public IDictionaryCondition<TKey, TValue> WhenInserted(Func<TValue, bool> condition)
-            => CreateCondition((key, value) => condition(value), insertDictionaryConditions);
+        public IKeyValueResultAccessor<TKey, TValue> WhenInserted(Func<TValue, bool> condition)
+            => CreateCondition(kvp => condition(kvp.Value), insertManager);
 
-        public IDictionaryCondition<TKey, TValue> WhenInserted(Func<TKey, TValue, bool> condition)
-            => CreateCondition(condition, insertDictionaryConditions);
+        public IKeyValueResultAccessor<TKey, TValue> WhenInserted(Func<TKey, TValue, bool> condition)
+            => CreateCondition(condition, insertManager);
 
-        public IDictionaryCondition<TKey, TValue> WhenInserted(Func<KeyValuePair<TKey, TValue>, bool> condition)
-            => CreateCondition(condition, insertDictionaryConditions);
+        public IKeyValueResultAccessor<TKey, TValue> WhenInserted(Func<KeyValuePair<TKey, TValue>, bool> condition)
+            => CreateCondition(condition, insertManager);
 
-        public IDictionaryCondition<TKey, TValue> WhenRemoved(Func<TKey, bool> condition)
-            => CreateCondition((key, value) => condition(key), removingDictionaryConditions);
+        public IKeyValueResultAccessor<TKey, TValue> WhenRemoved(Func<TKey, bool> condition)
+            => CreateCondition(kvp => condition(kvp.Key), removeManager);
 
-        public IDictionaryCondition<TKey, TValue> WhenRemoved(Func<TValue, bool> condition)
-            => CreateCondition((key, value) => condition(value), removingDictionaryConditions);
+        public IKeyValueResultAccessor<TKey, TValue> WhenRemoved(Func<TValue, bool> condition)
+            => CreateCondition(kvp => condition(kvp.Value), removeManager);
 
-        public IDictionaryCondition<TKey, TValue> WhenRemoved(Func<TKey, TValue, bool> condition)
-            => CreateCondition(condition, removingDictionaryConditions);
+        public IKeyValueResultAccessor<TKey, TValue> WhenRemoved(Func<TKey, TValue, bool> condition)
+            => CreateCondition(condition, removeManager);
 
-        public IDictionaryCondition<TKey, TValue> WhenRemoved(Func<KeyValuePair<TKey, TValue>, bool> condition)
-            => CreateCondition(condition, removingDictionaryConditions);
+        public IKeyValueResultAccessor<TKey, TValue> WhenRemoved(Func<KeyValuePair<TKey, TValue>, bool> condition)
+            => CreateCondition(condition, removeManager);
 
-        private static IDictionaryCondition<TKey, TValue> CreateCondition(Func<TKey, TValue, bool> condition,
-            IDictionaryConditionManager<TKey, TValue> manager)
+        private static IKeyValueResultAccessor<TKey, TValue> CreateCondition(Func<TKey, TValue, bool> condition,
+            IResultSetterManager<KeyValuePair<TKey, TValue>> manager)
         {
-            var c = new DictionaryCondition<TKey, TValue>(condition);
-            manager.Add(c);
-            return c;
+            return CreateCondition(kvp => condition(kvp.Key, kvp.Value), manager);
         }
 
-        private static IDictionaryCondition<TKey, TValue> CreateCondition(Func<KeyValuePair<TKey, TValue>, bool> condition,
-            IDictionaryConditionManager<TKey, TValue> manager)
+        private static IKeyValueResultAccessor<TKey, TValue> CreateCondition(Func<KeyValuePair<TKey, TValue>, bool> condition,
+            IResultSetterManager<KeyValuePair<TKey, TValue>> manager)
         {
-            var c = new DictionaryCondition<TKey, TValue>(condition);
+            var c = new KeyValueCondition<TKey, TValue>(condition);
             manager.Add(c);
             return c;
         }

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using Whenables.Core;
 
 namespace Whenables
 {
@@ -8,9 +9,9 @@ namespace Whenables
     {
         private readonly IList<T> list;
 
-        private readonly ListConditionManager<T> addingListConditions = new ListConditionManager<T>();
-        private readonly ListConditionManager<T> removingListConditions = new ListConditionManager<T>();
-        private readonly ListConditionManager<T> insertListConditions = new ListConditionManager<T>();
+        private readonly ListItemSetterManager<T> addManager = new ListItemSetterManager<T>();
+        private readonly ListItemSetterManager<T> removeManager = new ListItemSetterManager<T>();
+        private readonly ListItemSetterManager<T> insertManager = new ListItemSetterManager<T>();
 
         public WhenableList()
         {
@@ -33,7 +34,7 @@ namespace Whenables
             set
             {
                 list[index] = value;
-                insertListConditions.TrySetItemOnConditions(value, index);
+                insertManager.TrySet(value, index);
             }
         }
 
@@ -44,7 +45,7 @@ namespace Whenables
         public void Add(T item)
         {
             list.Add(item);
-            addingListConditions.TrySetItemOnConditions(item, list.Count-1);
+            addManager.TrySet(item, list.Count-1);
         }
 
         public void Clear()
@@ -65,7 +66,7 @@ namespace Whenables
             if (index >= 0)
             {
                 list.RemoveAt(index);
-                removingListConditions.TrySetItemOnConditions(item, index);
+                removeManager.TrySet(item, index);
             }
             return false;
         }
@@ -75,30 +76,30 @@ namespace Whenables
         public void Insert(int index, T item)
         {
             list.Insert(index, item);
-            insertListConditions.TrySetItemOnConditions(item, index);
+            insertManager.TrySet(item, index);
         }
 
         public void RemoveAt(int index)
         {
             T item = list[index];
             list.RemoveAt(index);
-            removingListConditions.TrySetItemOnConditions(item, index);
+            removeManager.TrySet(item, index);
         }
 
         public IEnumerator<T> GetEnumerator() => list.GetEnumerator();
 
         IEnumerator IEnumerable.GetEnumerator() => ((IEnumerable)list).GetEnumerator();
 
-        public IListCondition<T> WhenAdded(Func<T, bool> condition) => WhenAdded((t, i) => condition(t));
-        public IListCondition<T> WhenAdded(Func<T, int, bool> condition) => CreateCondition(condition, addingListConditions);
+        public IResultAccessor<T> WhenAdded(Func<T, bool> condition) => WhenAdded((t, i) => condition(t));
+        public IResultAccessor<T> WhenAdded(Func<T, int, bool> condition) => CreateCondition(condition, addManager);
 
-        public IListCondition<T> WhenInserted(Func<T, bool> condition) => WhenInserted((t, i) => condition(t));
-        public IListCondition<T> WhenInserted(Func<T, int, bool> condition) => CreateCondition(condition, insertListConditions);
+        public IResultAccessor<T> WhenInserted(Func<T, bool> condition) => WhenInserted((t, i) => condition(t));
+        public IResultAccessor<T> WhenInserted(Func<T, int, bool> condition) => CreateCondition(condition, insertManager);
 
-        public IListCondition<T> WhenRemoved(Func<T, bool> condition) => WhenRemoved((t, i) => condition(t));
-        public IListCondition<T> WhenRemoved(Func<T, int, bool> condition) => CreateCondition(condition, removingListConditions);
+        public IResultAccessor<T> WhenRemoved(Func<T, bool> condition) => WhenRemoved((t, i) => condition(t));
+        public IResultAccessor<T> WhenRemoved(Func<T, int, bool> condition) => CreateCondition(condition, removeManager);
 
-        private static IListCondition<T> CreateCondition(Func<T, int, bool> condition, IListConditionManager<T> manager)
+        private static IResultAccessor<T> CreateCondition(Func<T, int, bool> condition, IListItemSetterManager<T> manager)
         {
             var c = new ListCondition<T>(condition);
             manager.Add(c);

@@ -1,10 +1,11 @@
 ﻿using System;
+using Whenables.Core;
 
 namespace Whenables
 {
     public class Whenable<T> : IWhenable<T>
     {
-        private readonly ConditionManager<T> manager = new ConditionManager<T>();
+        private readonly ResultSetterManager<T> manager = new ResultSetterManager<T>();
 
         private T value;
 
@@ -23,11 +24,11 @@ namespace Whenables
             set
             {
                 this.value = value;
-                manager.TrySetItemOnConditions(value);
+                manager.TrySetResult(value);
             }
         }
 
-        public ICondition<T> When(Func<T, bool> condition)
+        public IResultAccessor<T> When(Func<T, bool> condition)
         {
             var c = new Condition<T>(condition);
             manager.Add(c);

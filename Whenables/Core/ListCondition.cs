@@ -1,25 +1,40 @@
-﻿using System;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Whenables
+namespace Whenables.Core
 {
-    public class Condition<T> : ICondition<T>
+    public class ListCondition<T> : IListResultSetter<T>, IResultAccessor<T>
     {
         private readonly object sync = new object();
 
-        private readonly Func<T, bool> condition;
+        private readonly Func<T, int, bool> condition;
 
         private TaskCompletionSource<T> tcs;
 
-        public Condition(Func<T, bool> condition)
+        public ListCondition(Func<T, bool> condition)
+            : this((t, i) => condition(t))
+        {
+        }
+
+        public ListCondition(Func<T, int, bool> condition)
         {
             this.condition = condition;
         }
 
-        public bool HasItem { get; private set; }
+        public T Result { get; private set; }
 
-        public T Item { get; private set; }
+        public bool HasResult { get; private set; }
+
+        public bool TrySetResult(T result, int index)
+        {
+            if (!condition(result, index))
+                return false;
+
+            SetResult(result);
+
+            return true;
+        }
 
         public T Get() => Get(CancellationToken.None);
         public T Get(TimeSpan timeout) => Get(new CancellationTokenSource(timeout).Token);
@@ -33,8 +48,8 @@ namespace Whenables
         {
             lock (sync)
             {
-                if (HasItem)
-                    return Task.FromResult(Item);
+                if (HasResult)
+                    return Task.FromResult(Result);
 
                 tcs = new TaskCompletionSource<T>();
 
@@ -44,20 +59,15 @@ namespace Whenables
             }
         }
 
-        public bool TrySetItem(T item)
+        protected void SetResult(T result)
         {
-            if (!condition(item))
-                return false;
-
             lock (sync)
             {
-                Item = item;
-                HasItem = true;
+                Result = result;
+                HasResult = true;
 
-                tcs?.TrySetResult(item);
+                tcs?.TrySetResult(result);
             }
-
-            return true;
         }
     }
 }
