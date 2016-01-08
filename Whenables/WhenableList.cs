@@ -90,14 +90,40 @@ namespace Whenables
 
         IEnumerator IEnumerable.GetEnumerator() => ((IEnumerable)list).GetEnumerator();
 
-        public IResultAccessor<T> WhenAdded(Func<T, bool> condition) => WhenAdded((t, i) => condition(t));
-        public IResultAccessor<T> WhenAdded(Func<T, int, bool> condition) => CreateCondition(condition, addManager);
+        public IResultAccessor<T> WhenAdded(Func<T, bool> condition) 
+            => WhenAdded((t, i) => condition(t));
+        public IResultAccessor<T> WhenAdded(Func<T, int, bool> condition) 
+            => CreateAddInsertCondition(condition, addManager);
 
-        public IResultAccessor<T> WhenInserted(Func<T, bool> condition) => WhenInserted((t, i) => condition(t));
-        public IResultAccessor<T> WhenInserted(Func<T, int, bool> condition) => CreateCondition(condition, insertManager);
+        public IResultAccessor<T> WhenInserted(Func<T, bool> condition)
+            => WhenInserted((t, i) => condition(t));
+        public IResultAccessor<T> WhenInserted(Func<T, int, bool> condition)
+            => CreateAddInsertCondition(condition, insertManager);
 
-        public IResultAccessor<T> WhenRemoved(Func<T, bool> condition) => WhenRemoved((t, i) => condition(t));
-        public IResultAccessor<T> WhenRemoved(Func<T, int, bool> condition) => CreateCondition(condition, removeManager);
+        public IResultAccessor<T> WhenRemoved(Func<T, bool> condition)
+            => WhenRemoved((t, i) => condition(t));
+        public IResultAccessor<T> WhenRemoved(Func<T, int, bool> condition)
+            => CreateCondition(condition, removeManager);
+
+        private IResultAccessor<T> CreateAddInsertCondition(Func<T, int, bool> condition, IListItemSetterManager<T> manager)
+        {
+            var c = new ListCondition<T>(condition);
+
+            // Go through all of the existing items to see if this condition
+            // has already been met. Otherwise the caller could potentially
+            // wait forever.
+            bool conditionNotMet = true;
+            for (int index = 0; index < list.Count; index++)
+                if (c.TrySetResult(list[index], index))
+                    conditionNotMet = false;
+
+            // The condition was not met by any of the items in the list. 
+            // Add the condition to the manager to be monitored.
+            if (conditionNotMet)
+                manager.Add(c);
+
+            return c;
+        }
 
         private static IResultAccessor<T> CreateCondition(Func<T, int, bool> condition, IListItemSetterManager<T> manager)
         {

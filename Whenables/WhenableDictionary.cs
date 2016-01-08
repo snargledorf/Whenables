@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using Whenables.Core;
 
 namespace Whenables
@@ -113,45 +114,60 @@ namespace Whenables
         IEnumerator IEnumerable.GetEnumerator() => ((IEnumerable)dict).GetEnumerator();
 
         public IKeyValueResultAccessor<TKey, TValue> WhenAdded(Func<TKey, bool> condition)
-            => CreateCondition(kvp => condition(kvp.Key), addManager);
+            => WhenAdded(kvp => condition(kvp.Key));
 
         public IKeyValueResultAccessor<TKey, TValue> WhenAdded(Func<TValue, bool> condition)
-            => CreateCondition(kvp => condition(kvp.Value), addManager);
+            => WhenAdded(kvp => condition(kvp.Value));
 
         public IKeyValueResultAccessor<TKey, TValue> WhenAdded(Func<TKey, TValue, bool> condition)
-            => CreateCondition(condition, addManager);
+            => WhenAdded(kvp => condition(kvp.Key, kvp.Value));
 
         public IKeyValueResultAccessor<TKey, TValue> WhenAdded(Func<KeyValuePair<TKey, TValue>, bool> condition)
-            => CreateCondition(condition, addManager);
+            => CreateAddInsertCondition(condition, addManager);
 
         public IKeyValueResultAccessor<TKey, TValue> WhenInserted(Func<TKey, bool> condition)
-            => CreateCondition(kvp => condition(kvp.Key), insertManager);
+            => WhenInserted(kvp => condition(kvp.Key));
 
         public IKeyValueResultAccessor<TKey, TValue> WhenInserted(Func<TValue, bool> condition)
-            => CreateCondition(kvp => condition(kvp.Value), insertManager);
+            => WhenInserted(kvp => condition(kvp.Value));
 
         public IKeyValueResultAccessor<TKey, TValue> WhenInserted(Func<TKey, TValue, bool> condition)
-            => CreateCondition(condition, insertManager);
+            => WhenInserted(kvp => condition(kvp.Key, kvp.Value));
 
         public IKeyValueResultAccessor<TKey, TValue> WhenInserted(Func<KeyValuePair<TKey, TValue>, bool> condition)
-            => CreateCondition(condition, insertManager);
+            => CreateAddInsertCondition(condition, insertManager);
 
         public IKeyValueResultAccessor<TKey, TValue> WhenRemoved(Func<TKey, bool> condition)
-            => CreateCondition(kvp => condition(kvp.Key), removeManager);
+            => WhenRemoved(kvp => condition(kvp.Key));
 
         public IKeyValueResultAccessor<TKey, TValue> WhenRemoved(Func<TValue, bool> condition)
-            => CreateCondition(kvp => condition(kvp.Value), removeManager);
+            => WhenRemoved(kvp => condition(kvp.Value));
 
         public IKeyValueResultAccessor<TKey, TValue> WhenRemoved(Func<TKey, TValue, bool> condition)
-            => CreateCondition(condition, removeManager);
+            => WhenRemoved(kvp => condition(kvp.Key, kvp.Value));
 
         public IKeyValueResultAccessor<TKey, TValue> WhenRemoved(Func<KeyValuePair<TKey, TValue>, bool> condition)
             => CreateCondition(condition, removeManager);
 
-        private static IKeyValueResultAccessor<TKey, TValue> CreateCondition(Func<TKey, TValue, bool> condition,
+        private IKeyValueResultAccessor<TKey, TValue> CreateAddInsertCondition(Func<KeyValuePair<TKey, TValue>, bool> condition, 
             IResultSetterManager<KeyValuePair<TKey, TValue>> manager)
         {
-            return CreateCondition(kvp => condition(kvp.Key, kvp.Value), manager);
+            var c = new KeyValueCondition<TKey, TValue>(condition);
+
+            // Go through all of the existing items to see if this condition
+            // has already been met. Otherwise the caller could potentially
+            // wait forever.
+            bool conditionNotMet = true;
+            foreach (KeyValuePair<TKey, TValue> kvp in dict)
+                if (c.TrySetResult(kvp))
+                    conditionNotMet = false;
+
+            // The condition was not met by any of the items in the dictionary. 
+            // Add the condition to the manager to be monitored.
+            if (conditionNotMet)
+                manager.Add(c);
+
+            return c;
         }
 
         private static IKeyValueResultAccessor<TKey, TValue> CreateCondition(Func<KeyValuePair<TKey, TValue>, bool> condition,
