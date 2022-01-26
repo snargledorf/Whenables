@@ -1,17 +1,23 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
 using Whenables.Core;
 
 namespace Whenables
 {
     public class WhenableList<T> : IWhenableList<T>
     {
-        private readonly IList<T> list;
+        private readonly List<T> list;
 
-        private readonly ListItemSetterManager<T> addManager = new ListItemSetterManager<T>();
-        private readonly ListItemSetterManager<T> removeManager = new ListItemSetterManager<T>();
-        private readonly ListItemSetterManager<T> insertManager = new ListItemSetterManager<T>();
+        private readonly WheneableItemIndexPairConditionManager<T> addManager = new();
+        private readonly WheneableItemIndexPairConditionManager<T> removeManager = new();
+        private readonly WheneableItemIndexPairConditionManager<T> insertManager = new();
+
+        private static readonly object lockObj = new();
 
         public WhenableList()
         {
@@ -30,22 +36,18 @@ namespace Whenables
 
         public T this[int index]
         {
-            get { return list[index]; }
-            set
-            {
-                list[index] = value;
-                insertManager.TrySet(value, index);
-            }
+            get => list[index];
+            set => Insert(index, value);
         }
 
         public int Count => list.Count;
 
-        public bool IsReadOnly => list.IsReadOnly;
+        public bool IsReadOnly => false;
 
         public void Add(T item)
         {
             list.Add(item);
-            addManager.TrySet(item, list.Count-1);
+            TrySet(item, list.Count - 1, addManager);
         }
 
         public void Clear()
@@ -66,7 +68,7 @@ namespace Whenables
             if (index >= 0)
             {
                 list.RemoveAt(index);
-                removeManager.TrySet(item, index);
+                TrySet(item, index, removeManager);
             }
             return false;
         }
@@ -76,60 +78,73 @@ namespace Whenables
         public void Insert(int index, T item)
         {
             list.Insert(index, item);
-            insertManager.TrySet(item, index);
+            TrySet(item, index, insertManager);
         }
 
         public void RemoveAt(int index)
         {
             T item = list[index];
             list.RemoveAt(index);
-            removeManager.TrySet(item, index);
+            TrySet(item, index, removeManager);
         }
 
         public IEnumerator<T> GetEnumerator() => list.GetEnumerator();
 
         IEnumerator IEnumerable.GetEnumerator() => ((IEnumerable)list).GetEnumerator();
 
-        public IResultAccessor<T> WhenAdded(Func<T, bool> condition) 
-            => WhenAdded((t, i) => condition(t));
-        public IResultAccessor<T> WhenAdded(Func<T, int, bool> condition) 
-            => CreateAddInsertCondition(condition, addManager);
+        public Task<T> WhenAddedAsync(Func<T, bool> condition)
+            => WhenAddedAsync((t, _) => condition(t));
 
-        public IResultAccessor<T> WhenInserted(Func<T, bool> condition)
-            => WhenInserted((t, i) => condition(t));
-        public IResultAccessor<T> WhenInserted(Func<T, int, bool> condition)
-            => CreateAddInsertCondition(condition, insertManager);
+        public Task<T> WhenAddedAsync(Func<T, bool> condition, CancellationToken cancellationToken)
+            => WhenAddedAsync((t, _) => condition(t), cancellationToken);
 
-        public IResultAccessor<T> WhenRemoved(Func<T, bool> condition)
-            => WhenRemoved((t, i) => condition(t));
-        public IResultAccessor<T> WhenRemoved(Func<T, int, bool> condition)
-            => CreateCondition(condition, removeManager);
+        public Task<T> WhenAddedAsync(Func<T, int, bool> condition)
+            => WhenAddedAsync(condition, CancellationToken.None);
 
-        private IResultAccessor<T> CreateAddInsertCondition(Func<T, int, bool> condition, IListItemSetterManager<T> manager)
+        public Task<T> WhenAddedAsync(Func<T, int, bool> condition, CancellationToken cancellationToken)
+            => CreateConditionAsync(condition, addManager, cancellationToken);
+
+        public Task<T> WhenInsertedAsync(Func<T, bool> condition)
+            => WhenInsertedAsync((t, _) => condition(t));
+
+        public Task<T> WhenInsertedAsync(Func<T, bool> condition, CancellationToken cancellationToken)
+            => WhenInsertedAsync((t, _) => condition(t), CancellationToken.None);
+
+        public Task<T> WhenInsertedAsync(Func<T, int, bool> condition)
+            => WhenInsertedAsync(condition, CancellationToken.None);
+
+        public Task<T> WhenInsertedAsync(Func<T, int, bool> condition, CancellationToken cancellationToken)
+            => CreateConditionAsync(condition, insertManager, cancellationToken);
+
+        public Task<T> WhenRemovedAsync(Func<T, bool> condition)
+            => WhenRemovedAsync((t, _) => condition(t));
+
+        public Task<T> WhenRemovedAsync(Func<T, bool> condition, CancellationToken cancellationToken)
+            => WhenRemovedAsync((t, _) => condition(t), cancellationToken);
+
+        public Task<T> WhenRemovedAsync(Func<T, int, bool> condition)
+            => WhenRemovedAsync(condition, CancellationToken.None);
+
+        public Task<T> WhenRemovedAsync(Func<T, int, bool> condition, CancellationToken cancellationToken)
+            => CreateConditionAsync(condition, removeManager, cancellationToken);
+
+        private static async Task<T> CreateConditionAsync(Func<T, int, bool> condition, IWheneableItemIndexPairConditionManager<T> manager, CancellationToken cancellationToken)
         {
-            var c = new ListCondition<T>(condition);
+            TaskCompletionSource<ItemIndexPair<T>> tcs;
+            lock (lockObj)
+            {
+                tcs = manager.AddCondition(condition);
+                cancellationToken.Register(() => tcs.TrySetCanceled());
+            }
 
-            // Go through all of the existing items to see if this condition
-            // has already been met. Otherwise the caller could potentially
-            // wait forever.
-            bool conditionNotMet = true;
-            for (int index = 0; index < list.Count; index++)
-                if (c.TrySetResult(list[index], index))
-                    conditionNotMet = false;
-
-            // The condition was not met by any of the items in the list. 
-            // Add the condition to the manager to be monitored.
-            if (conditionNotMet)
-                manager.Add(c);
-
-            return c;
+            ItemIndexPair<T> result = await tcs.Task;
+            return result.Item;
         }
 
-        private static IResultAccessor<T> CreateCondition(Func<T, int, bool> condition, IListItemSetterManager<T> manager)
+        private static void TrySet(T value, int index, IWheneableItemIndexPairConditionManager<T> manager)
         {
-            var c = new ListCondition<T>(condition);
-            manager.Add(c);
-            return c;
+            lock (lockObj)
+                manager.TrySet(value, index);
         }
     }
 }

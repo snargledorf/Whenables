@@ -31,12 +31,56 @@ namespace WhenablesTests
 
             Task addTenTask = addTenAsync();
 
-            Task<int> whenAddedTask = list.WhenAdded(i => i == 9).GetAsync();
+            Task<int> whenAddedTask = list.WhenAddedAsync(i => i == 9);
 
             await Task.WhenAll(addTenTask, whenAddedTask);
 
             Assert.IsTrue(whenAddedTask.IsCompletedSuccessfully);
             Assert.AreEqual(9, whenAddedTask.Result);
+        }
+
+        [TestMethod]
+        public async Task MultipleWhenAddedAsync()
+        {
+            var random = new Random();
+
+            int expectedNum = random.Next(10, 20);
+            int randomPadding = random.Next(5);
+            int upperNumber = expectedNum + randomPadding;
+
+            var list = new WhenableList<int>();
+
+            async Task addTenAsync()
+            {
+                await Task.Delay(100);
+                for (int i = 0; i < 10; i++)
+                {
+                    list.Add(i);
+                    await Task.Delay(10);
+                }
+            }
+
+            Task addTenTask = addTenAsync();
+
+            Task<int> whenAddedTask = list.WhenAddedAsync(i => i == 9);
+            Task<int> whenAdded2Task = list.WhenAddedAsync(IsThree);
+            Task<int> whenAdded3Task = list.WhenAddedAsync(IsThree);
+
+            await Task.WhenAll(addTenTask, whenAddedTask, whenAdded2Task, whenAdded3Task);
+
+            Assert.IsTrue(whenAddedTask.IsCompletedSuccessfully);
+            Assert.AreEqual(9, whenAddedTask.Result);
+
+            Assert.IsTrue(whenAdded2Task.IsCompletedSuccessfully);
+            Assert.AreEqual(3, whenAdded2Task.Result);
+
+            Assert.IsTrue(whenAdded3Task.IsCompletedSuccessfully);
+            Assert.AreEqual(3, whenAdded2Task.Result);
+
+            static bool IsThree(int i)
+            {
+                return i == 3;
+            }
         }
 
         [TestMethod]
@@ -65,7 +109,7 @@ namespace WhenablesTests
 
             Task addRemoveTask = addRemoveAsync();
 
-            Task<int> whenRemovedTask = list.WhenRemoved(i => i == expectedNum).GetAsync();
+            Task<int> whenRemovedTask = list.WhenRemovedAsync(i => i == expectedNum);
 
             await Task.WhenAll(addRemoveTask, whenRemovedTask);
 

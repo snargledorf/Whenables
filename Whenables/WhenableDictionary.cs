@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+
 using Whenables.Core;
 
 namespace Whenables
@@ -10,9 +12,11 @@ namespace Whenables
     {
         private readonly IDictionary<TKey, TValue> dict;
 
-        private readonly KeyValueSetterManager<TKey, TValue> addManager = new KeyValueSetterManager<TKey, TValue>();
-        private readonly KeyValueSetterManager<TKey, TValue> removeManager = new KeyValueSetterManager<TKey, TValue>();
-        private readonly KeyValueSetterManager<TKey, TValue> insertManager = new KeyValueSetterManager<TKey, TValue>();
+        private readonly WhenableKeyValuePairConditionManager<TKey, TValue> addManager = new();
+        private readonly WhenableKeyValuePairConditionManager<TKey, TValue> removeManager = new();
+        private readonly WhenableKeyValuePairConditionManager<TKey, TValue> insertManager = new();
+
+        private static readonly object lockObj = new();
 
         public WhenableDictionary()
         {
@@ -45,7 +49,7 @@ namespace Whenables
             set
             {
                 dict[key] = value;
-                insertManager.TrySet(key, value);
+                TrySet(key, value, insertManager);
             }
         }
 
@@ -60,7 +64,7 @@ namespace Whenables
         public void Add(KeyValuePair<TKey, TValue> item)
         {
             dict.Add(item);
-            addManager.TrySetResult(item);
+            TrySet(item, addManager);
         }
 
         public void Clear()
@@ -80,7 +84,7 @@ namespace Whenables
             if (!dict.Remove(item))
                 return false;
 
-            removeManager.TrySetResult(item);
+            TrySet(item, removeManager);
 
             return true;
         }
@@ -90,7 +94,7 @@ namespace Whenables
         public void Add(TKey key, TValue value)
         {
             dict.Add(key, value);
-            addManager.TrySet(key, value);
+            TrySet(key, value, addManager);
         }
 
         public bool Remove(TKey key)
@@ -103,7 +107,7 @@ namespace Whenables
             if (!dict.Remove(key))
                 return false;
 
-            removeManager.TrySet(key, value);
+            TrySet(key, value, removeManager);
 
             return true;
         }
@@ -113,69 +117,100 @@ namespace Whenables
         public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator() => dict.GetEnumerator();
         IEnumerator IEnumerable.GetEnumerator() => ((IEnumerable)dict).GetEnumerator();
 
-        public IKeyValueResultAccessor<TKey, TValue> WhenAdded(Func<TKey, bool> condition)
-            => WhenAdded(kvp => condition(kvp.Key));
+        public Task<KeyValuePair<TKey, TValue>> WhenAddedAsync(Func<TKey, bool> condition)
+            => WhenAddedAsync(kvp => condition(kvp.Key));
 
-        public IKeyValueResultAccessor<TKey, TValue> WhenAdded(Func<TValue, bool> condition)
-            => WhenAdded(kvp => condition(kvp.Value));
+        public Task<KeyValuePair<TKey, TValue>> WhenAddedAsync(Func<TKey, bool> condition, CancellationToken cancellationToken)
+            => WhenAddedAsync(kvp => condition(kvp.Key), cancellationToken);
 
-        public IKeyValueResultAccessor<TKey, TValue> WhenAdded(Func<TKey, TValue, bool> condition)
-            => WhenAdded(kvp => condition(kvp.Key, kvp.Value));
+        public Task<KeyValuePair<TKey, TValue>> WhenAddedAsync(Func<TValue, bool> condition)
+            => WhenAddedAsync(kvp => condition(kvp.Value));
 
-        public IKeyValueResultAccessor<TKey, TValue> WhenAdded(Func<KeyValuePair<TKey, TValue>, bool> condition)
-            => CreateAddInsertCondition(condition, addManager);
+        public Task<KeyValuePair<TKey, TValue>> WhenAddedAsync(Func<TValue, bool> condition, CancellationToken cancellationToken)
+            => WhenAddedAsync(kvp => condition(kvp.Value), cancellationToken);
 
-        public IKeyValueResultAccessor<TKey, TValue> WhenInserted(Func<TKey, bool> condition)
-            => WhenInserted(kvp => condition(kvp.Key));
+        public Task<KeyValuePair<TKey, TValue>> WhenAddedAsync(Func<TKey, TValue, bool> condition)
+            => WhenAddedAsync(kvp => condition(kvp.Key, kvp.Value));
 
-        public IKeyValueResultAccessor<TKey, TValue> WhenInserted(Func<TValue, bool> condition)
-            => WhenInserted(kvp => condition(kvp.Value));
+        public Task<KeyValuePair<TKey, TValue>> WhenAddedAsync(Func<TKey, TValue, bool> condition, CancellationToken cancellationToken)
+            => WhenAddedAsync(kvp => condition(kvp.Key, kvp.Value), cancellationToken);
 
-        public IKeyValueResultAccessor<TKey, TValue> WhenInserted(Func<TKey, TValue, bool> condition)
-            => WhenInserted(kvp => condition(kvp.Key, kvp.Value));
+        public Task<KeyValuePair<TKey, TValue>> WhenAddedAsync(Func<KeyValuePair<TKey, TValue>, bool> condition)
+            => WhenAddedAsync(condition, CancellationToken.None);
 
-        public IKeyValueResultAccessor<TKey, TValue> WhenInserted(Func<KeyValuePair<TKey, TValue>, bool> condition)
-            => CreateAddInsertCondition(condition, insertManager);
+        public Task<KeyValuePair<TKey, TValue>> WhenAddedAsync(Func<KeyValuePair<TKey, TValue>, bool> condition, CancellationToken cancellationToken)
+            => CreateConditionAsync(condition, addManager, cancellationToken);
 
-        public IKeyValueResultAccessor<TKey, TValue> WhenRemoved(Func<TKey, bool> condition)
-            => WhenRemoved(kvp => condition(kvp.Key));
+        public Task<KeyValuePair<TKey, TValue>> WhenInsertedAsync(Func<TKey, bool> condition)
+            => WhenInsertedAsync(kvp => condition(kvp.Key));
 
-        public IKeyValueResultAccessor<TKey, TValue> WhenRemoved(Func<TValue, bool> condition)
-            => WhenRemoved(kvp => condition(kvp.Value));
+        public Task<KeyValuePair<TKey, TValue>> WhenInsertedAsync(Func<TKey, bool> condition, CancellationToken cancellationToken)
+            => WhenInsertedAsync(kvp => condition(kvp.Key), cancellationToken);
 
-        public IKeyValueResultAccessor<TKey, TValue> WhenRemoved(Func<TKey, TValue, bool> condition)
-            => WhenRemoved(kvp => condition(kvp.Key, kvp.Value));
+        public Task<KeyValuePair<TKey, TValue>> WhenInsertedAsync(Func<TValue, bool> condition)
+            => WhenInsertedAsync(kvp => condition(kvp.Value));
 
-        public IKeyValueResultAccessor<TKey, TValue> WhenRemoved(Func<KeyValuePair<TKey, TValue>, bool> condition)
-            => CreateCondition(condition, removeManager);
+        public Task<KeyValuePair<TKey, TValue>> WhenInsertedAsync(Func<TValue, bool> condition, CancellationToken cancellationToken)
+            => WhenInsertedAsync(kvp => condition(kvp.Value), cancellationToken);
 
-        private IKeyValueResultAccessor<TKey, TValue> CreateAddInsertCondition(Func<KeyValuePair<TKey, TValue>, bool> condition, 
-            IResultSetterManager<KeyValuePair<TKey, TValue>> manager)
+        public Task<KeyValuePair<TKey, TValue>> WhenInsertedAsync(Func<TKey, TValue, bool> condition)
+            => WhenInsertedAsync(kvp => condition(kvp.Key, kvp.Value));
+
+        public Task<KeyValuePair<TKey, TValue>> WhenInsertedAsync(Func<TKey, TValue, bool> condition, CancellationToken cancellationToken)
+            => WhenInsertedAsync(kvp => condition(kvp.Key, kvp.Value), cancellationToken);
+
+        public Task<KeyValuePair<TKey, TValue>> WhenInsertedAsync(Func<KeyValuePair<TKey, TValue>, bool> condition)
+            => WhenInsertedAsync(condition, CancellationToken.None);
+
+        public Task<KeyValuePair<TKey, TValue>> WhenInsertedAsync(Func<KeyValuePair<TKey, TValue>, bool> condition, CancellationToken cancellationToken)
+            => CreateConditionAsync(condition, insertManager, cancellationToken);
+
+        public Task<KeyValuePair<TKey, TValue>> WhenRemovedAsync(Func<TKey, bool> condition)
+            => WhenRemovedAsync(kvp => condition(kvp.Key));
+
+        public Task<KeyValuePair<TKey, TValue>> WhenRemovedAsync(Func<TValue, bool> condition)
+            => WhenRemovedAsync(kvp => condition(kvp.Value));
+
+        public Task<KeyValuePair<TKey, TValue>> WhenRemovedAsync(Func<TKey, TValue, bool> condition)
+            => WhenRemovedAsync(kvp => condition(kvp.Key, kvp.Value));
+
+        public Task<KeyValuePair<TKey, TValue>> WhenRemovedAsync(Func<KeyValuePair<TKey, TValue>, bool> condition)
+            => WhenRemovedAsync(condition, CancellationToken.None);
+
+        public Task<KeyValuePair<TKey, TValue>> WhenRemovedAsync(Func<TKey, bool> condition, CancellationToken cancellationToken)
+            => WhenRemovedAsync(kvp => condition(kvp.Key), cancellationToken);
+
+        public Task<KeyValuePair<TKey, TValue>> WhenRemovedAsync(Func<TValue, bool> condition, CancellationToken cancellationToken)
+            => WhenRemovedAsync(kvp => condition(kvp.Value), cancellationToken);
+
+        public Task<KeyValuePair<TKey, TValue>> WhenRemovedAsync(Func<TKey, TValue, bool> condition, CancellationToken cancellationToken)
+            => WhenRemovedAsync(kvp => condition(kvp.Key, kvp.Value), cancellationToken);
+
+        public Task<KeyValuePair<TKey, TValue>> WhenRemovedAsync(Func<KeyValuePair<TKey, TValue>, bool> condition, CancellationToken cancellationToken)
+            => CreateConditionAsync(condition, removeManager, cancellationToken);
+
+        
+        private static Task<KeyValuePair<TKey, TValue>> CreateConditionAsync(Func<KeyValuePair<TKey, TValue>, bool> condition,
+            IWhenableConditionManager<KeyValuePair<TKey, TValue>> manager, CancellationToken cancellationToken)
         {
-            var c = new KeyValueCondition<TKey, TValue>(condition);
-
-            // Go through all of the existing items to see if this condition
-            // has already been met. Otherwise the caller could potentially
-            // wait forever.
-            bool conditionNotMet = true;
-            foreach (KeyValuePair<TKey, TValue> kvp in dict)
-                if (c.TrySetResult(kvp))
-                    conditionNotMet = false;
-
-            // The condition was not met by any of the items in the dictionary. 
-            // Add the condition to the manager to be monitored.
-            if (conditionNotMet)
-                manager.Add(c);
-
-            return c;
+            lock (lockObj)
+            {
+                TaskCompletionSource<KeyValuePair<TKey, TValue>> tcs = manager.AddCondition(condition);
+                cancellationToken.Register(() => tcs.TrySetCanceled());
+                return tcs.Task;
+            }
         }
 
-        private static IKeyValueResultAccessor<TKey, TValue> CreateCondition(Func<KeyValuePair<TKey, TValue>, bool> condition,
-            IResultSetterManager<KeyValuePair<TKey, TValue>> manager)
+        private static void TrySet(TKey key, TValue value, IWhenableKeyValuePairConditionManager<TKey, TValue> manager)
         {
-            var c = new KeyValueCondition<TKey, TValue>(condition);
-            manager.Add(c);
-            return c;
+            lock (lockObj)
+                manager.TrySet(key, value);
+        }
+
+        private static void TrySet(KeyValuePair<TKey, TValue> item, IWhenableKeyValuePairConditionManager<TKey, TValue> manager)
+        {
+            lock (lockObj)
+                manager.TrySet(item);
         }
     }
 }

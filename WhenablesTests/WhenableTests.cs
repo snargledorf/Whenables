@@ -8,11 +8,11 @@ namespace WhenablesTests
     public class WhenableTests
     {
         [TestMethod]
-        public void SetValueGet()
+        public async Task SetValueAsync()
         {
             var v = new Whenable<int>();
 
-            Task.Delay(100).ContinueWith(t =>
+            Task setTask = Task.Delay(100).ContinueWith(t =>
             {
                 for (int i = 10; i > 0; i--)
                 {
@@ -20,9 +20,12 @@ namespace WhenablesTests
                 }
             });
 
-            int value = v.When(i => i == 1).Get();
+            Task<int> valueTask = v.WhenAsync(i => i == 1);
 
-            Assert.AreEqual(1, value);
+            await Task.WhenAll(setTask, valueTask);
+
+            Assert.IsTrue(valueTask.IsCompletedSuccessfully);
+            Assert.AreEqual(1, valueTask.Result);
         }
     }
 }

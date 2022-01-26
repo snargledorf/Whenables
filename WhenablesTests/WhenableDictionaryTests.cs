@@ -1,4 +1,5 @@
-﻿using System.Threading.Tasks;
+﻿using System.Collections.Generic;
+using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Whenables;
 
@@ -8,13 +9,13 @@ namespace WhenablesTests
     public class WhenableDictionaryTests
     {
         [TestMethod]
-        public void WhenAddedGet()
+        public async Task WhenAddedAsync()
         {
             const int expectedKey = 9;
 
             var dict = new WhenableDictionary<int, string>();
             
-            Task.Delay(100).ContinueWith(t =>
+            Task addTask = Task.Delay(100).ContinueWith(t =>
             {
                 for (int i = 0; i < expectedKey+1; i++)
                 {
@@ -22,19 +23,22 @@ namespace WhenablesTests
                 }
             });
 
-            string result = dict.WhenAdded((k, v) => k == expectedKey).GetValue();
+            Task<KeyValuePair<int, string>> resultTask = dict.WhenAddedAsync((k, v) => k == expectedKey);
 
-            Assert.AreEqual(expectedKey.ToString(), result);
+            await Task.WhenAll(addTask, resultTask);
+
+            Assert.IsTrue(resultTask.IsCompletedSuccessfully);
+            Assert.AreEqual(expectedKey, resultTask.Result.Key);
         }
 
         [TestMethod]
-        public void WhenRemovedGet()
+        public async Task WhenRemovedAsync()
         {
             const int expectedKey = 9;
 
             var dict = new WhenableDictionary<int, string>();
 
-            Task.Delay(100).ContinueWith(t =>
+            Task addRemoveTask = Task.Delay(100).ContinueWith(t =>
             {
                 for (int i = 0; i < expectedKey + 1; i++)
                 {
@@ -46,29 +50,12 @@ namespace WhenablesTests
                 }
             });
 
-            string result = dict.WhenRemoved((k, v) => k == expectedKey).GetValue();
+            Task<KeyValuePair<int, string>> resultTask = dict.WhenRemovedAsync((k, v) => k == expectedKey);
 
-            Assert.AreEqual(expectedKey.ToString(), result);
-        }
+            await Task.WhenAll(addRemoveTask, resultTask);
 
-        [TestMethod]
-        public async Task WhenAddedAsync()
-        {
-            const int expectedKey = 9;
-
-            var dict = new WhenableDictionary<int, string>();
-
-            Task task = Task.Delay(100).ContinueWith(t =>
-            {
-                for (int i = 0; i < expectedKey + 1; i++)
-                {
-                    dict.Add(i, i.ToString());
-                }
-            });
-
-            string result = await dict.WhenAdded((k, v) => k == expectedKey).GetValueAsync();
-
-            Assert.AreEqual(expectedKey.ToString(), result);
+            Assert.IsTrue(resultTask.IsCompletedSuccessfully);
+            Assert.AreEqual(expectedKey, resultTask.Result.Key);
         }
     }
 }
