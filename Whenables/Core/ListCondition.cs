@@ -6,11 +6,9 @@ namespace Whenables.Core
 {
     public class ListCondition<T> : IListResultSetter<T>, IResultAccessor<T>
     {
-        private readonly object sync = new object();
-
         private readonly Func<T, int, bool> condition;
 
-        private TaskCompletionSource<T> tcs;
+        private TaskCompletionSource<T> tcs = new();
 
         public ListCondition(Func<T, bool> condition)
             : this((t, i) => condition(t))
@@ -22,9 +20,9 @@ namespace Whenables.Core
             this.condition = condition;
         }
 
-        public T Result { get; private set; }
+        public T Result => tcs.Task.Result;
 
-        public bool HasResult { get; private set; }
+        public bool HasResult => tcs.Task.IsCompletedSuccessfully;
 
         public bool TrySetResult(T result, int index)
         {
@@ -46,28 +44,13 @@ namespace Whenables.Core
         public Task<T> GetAsync(int timeoutMilliseconds) => GetAsync(TimeSpan.FromMilliseconds(timeoutMilliseconds));
         public Task<T> GetAsync(CancellationToken cancellationToken)
         {
-            lock (sync)
-            {
-                if (HasResult)
-                    return Task.FromResult(Result);
-
-                tcs = new TaskCompletionSource<T>();
-
-                cancellationToken.Register(() => tcs?.TrySetCanceled());
-
-                return tcs.Task;
-            }
+            cancellationToken.Register(() => tcs.TrySetCanceled());
+            return tcs.Task;
         }
 
         protected void SetResult(T result)
         {
-            lock (sync)
-            {
-                Result = result;
-                HasResult = true;
-
-                tcs?.TrySetResult(result);
-            }
+            tcs.TrySetResult(result);
         }
     }
 }

@@ -9,46 +9,68 @@ namespace WhenablesTests
     public class WhenableListTests
     {
         [TestMethod]
-        public void WhenAddedGet()
+        public async Task WhenAddedGetAsync()
         {
+            var random = new Random();
+
+            int expectedNum = random.Next(10, 20);
+            int randomPadding = random.Next(5);
+            int upperNumber = expectedNum + randomPadding;
+
             var list = new WhenableList<int>();
 
-            Task.Delay(100).ContinueWith(t =>
+            async Task addTenAsync()
             {
+                await Task.Delay(100);
                 for (int i = 0; i < 10; i++)
                 {
                     list.Add(i);
                     Task.Delay(10).Wait();
                 }
-            });
+            };
 
-            int result = list.WhenAdded(i => i == 9).Get();
+            Task addTenTask = addTenAsync();
 
-            Assert.AreEqual(9, result);
+            Task<int> whenAddedTask = list.WhenAdded(i => i == 9).GetAsync();
+
+            await Task.WhenAll(addTenTask, whenAddedTask);
+
+            Assert.IsTrue(whenAddedTask.IsCompletedSuccessfully);
+            Assert.AreEqual(9, whenAddedTask.Result);
         }
 
         [TestMethod]
-        public void WhenRemovedGet()
+        public async Task WhenRemovedGetAsync()
         {
-            const int expectedNum = 9;
+            var random = new Random();
+            
+            int expectedNum = random.Next(10, 20);
+            int randomPadding = random.Next(5);
+            int upperNumber = expectedNum + randomPadding;
 
             var list = new WhenableList<int>();
 
-            Task.Delay(100).ContinueWith(t =>
+            for (int i = 0; i < upperNumber; i++)
+                list.Add(i);
+
+            async Task addRemoveAsync()
             {
-                for (int i = 0; i < expectedNum + 1; i++)
-                {
-                    list.Add(i);
-                }
+                await Task.Delay(100);
+
                 for (int i = expectedNum; i > 0; i--)
                 {
                     list.Remove(i);
                 }
-            });
+            }
 
-            int result = list.WhenRemoved(i => i == expectedNum).Get();
+            Task addRemoveTask = addRemoveAsync();
 
-            Assert.AreEqual(expectedNum, result);
+            Task<int> whenRemovedTask = list.WhenRemoved(i => i == expectedNum).GetAsync();
+
+            await Task.WhenAll(addRemoveTask, whenRemovedTask);
+
+            Assert.IsTrue(whenRemovedTask.IsCompletedSuccessfully);
+            Assert.AreEqual(expectedNum, whenRemovedTask.Result);
         }
     }
 }
